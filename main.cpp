@@ -20,6 +20,9 @@ const Sint32 WALL_COST = 10;
 const Sint32 CANNON_COST = 20;
 const Sint32 MINE_COST = 30;
 const Sint32 BALL_COST = 5;
+const Uint32 SURPRISE_MIN_INTERVAL = 5000;
+const Uint32 SURPRISE_MAX_INTERVAL = 20000;
+const Sint32 SURPRISE_SUPPLY = 50; 
 const double PI = 3.14159265;
 
 // Textures
@@ -33,12 +36,21 @@ SDL_Texture* mineTexture;
 SDL_Texture* ballTexture;
 SDL_Texture* oreTexture;
 
+// Font
+TTF_Font* font = NULL;
+
 // Tile types
 enum TileType {
   WALL = 0,
-  CANNON = 1,
-  MINE = 2,
-  KING = 3,
+  MINE = 1,
+  CANNON = 2,
+  KING = 3
+};
+
+// Team
+enum Team {
+  BLUE = 0,
+  RED = 1
 };
 
 // Game entities
@@ -47,6 +59,7 @@ struct Tile {
   SDL_Texture* texture;
   bool alive;
   TileType type; 
+  Team team;
   double angle;
 };
 
@@ -63,13 +76,23 @@ struct Player {
   Tile tile;
   Tile castle[CASTLE_SIZE][CASTLE_SIZE];
   Ball balls[MAX_BALLS];
+  Team team;
   Tile* king;
   Sint32 ore;
   SDL_Texture* cursorTexture;
   SDL_Texture* oreTexture;
   Sint32 castleOffset;
+  bool winner;
 };
 
+struct Surprise {
+  Sint32 x, y;
+  Uint8 alpha;
+  bool alive;
+  bool spawning;
+  Uint32 lastSpawnTime;
+  Uint32 nextSpawnTime;
+} surprise;
 
 struct World {
   float gravity = 0.5f;
@@ -79,6 +102,7 @@ struct World {
 Player p1, p2;
 bool keyDown = false;
 Sint32 lastSupplyTime = 0;
+SDL_Texture* winnerText;
 
 #include "framework.cpp"
 #include "utils.cpp"
@@ -88,9 +112,6 @@ bool load() {
     // Loading success flag
     bool success = true;
     
-    // Seed random number generator
-    srand(time(NULL));
-
     // Init font
     font = TTF_OpenFont("assets/PixelText.ttf", 32);
     if (font == NULL) {
@@ -108,41 +129,7 @@ bool load() {
     ballTexture = loadTexture("assets/ball.png");
     oreTexture = loadTexture("assets/ore.png");
 
-    // Init p1
-    p1.tile.texture = kingTexture;
-    p1.tile.type = KING;
-    p1.tile.x = 0;
-    p1.tile.y = 0;
-    p1.cursorTexture = cursorBlueTexture;
-    p1.castleOffset = 0;
-    p1.king = NULL;
-    p1.ore = 0;
-
-    // Init p2
-    p2.tile.texture = kingTexture;
-    p2.tile.type = KING;
-    p2.tile.x = 0;
-    p2.tile.y = 0;
-    p2.cursorTexture = cursorRedTexture;
-    p2.castleOffset = SCREEN_WIDTH - CASTLE_SIZE * TILE_SIZE;
-    p2.king = NULL;
-    p2.ore = 0;
-
-    // Init castles
-    for (Sint32 row = 0; row < CASTLE_SIZE; row++) {
-      for (Sint32 col = 0; col < CASTLE_SIZE; col++) {
-        p1.castle[row][col].alive = false;
-        p2.castle[row][col].alive = false;
-      }
-    }
-
-    // Init balls
-    for (Sint32 i = 0; i < CASTLE_SIZE; i++) {
-      p1.balls[i].alive = false;
-      p1.balls[i].collide = false;
-      p2.balls[i].alive = false;
-      p2.balls[i].collide = false;
-    }
+    initGame();
 
     return success;
 }
@@ -160,6 +147,10 @@ void close() {
     SDL_DestroyTexture(ballTexture);
     SDL_DestroyTexture(oreTexture);
 
+    // Free font
+    TTF_CloseFont(font);
+    font = NULL;
+
     closeFramework();
 }
 
@@ -169,7 +160,7 @@ void input(SDL_Event* e) {
 
   if (e->type == SDL_KEYDOWN) {
 
-    SDL_Scancode code = e->key.keysym.scancode;
+    SDL_Scancode code = e->key.keysym.scancode; 
 
     //-------------P1------------\\
 
@@ -181,24 +172,13 @@ void input(SDL_Event* e) {
     } else if (code == SDL_SCANCODE_A) {
       if (p1.tile.x > 0) { p1.tile.x--; }
     } else if (code == SDL_SCANCODE_D) {
-      if (p1.tile.x < CASTLE_SIZE-1) { p1.tile.x++; }
-    }
-
-    // Change tile
-    if (code == SDL_SCANCODE_J) {
-      changeTile(&p1);
-    }
-
-    // Place tile or fire cannon
-    if (code == SDL_SCANCODE_SPACE) {
-      actionTile(&p1); // Execute action associated to this tile
-      setTile(&p1);    // If unset, set new tile
+      if (p1.tile.x < CASTLE_SIZE * 2 - 1) { p1.tile.x++; }
     }
 
     // Rotate cannon
-    if (code == SDL_SCANCODE_K) {
+    if (code == SDL_SCANCODE_G) {
       rotateCannon(&p1, -1);
-    } else if (code == SDL_SCANCODE_L) {
+    } else if (code == SDL_SCANCODE_H) {
       rotateCannon(&p1, 1);
     }
 
@@ -210,20 +190,9 @@ void input(SDL_Event* e) {
     } else if (code == SDL_SCANCODE_DOWN) {
       if (p2.tile.y < CASTLE_SIZE-1) { p2.tile.y++; }
     } else if (code == SDL_SCANCODE_LEFT) {
-      if (p2.tile.x > 0) { p2.tile.x--; }
+      if (p2.tile.x > -CASTLE_SIZE) { p2.tile.x--; }
     } else if (code == SDL_SCANCODE_RIGHT) {
       if (p2.tile.x < CASTLE_SIZE-1) { p2.tile.x++; }
-    }
-
-    // Change tile
-    if (code == SDL_SCANCODE_I) {
-      changeTile(&p2);
-    }
-
-    // Place tile or fire cannon
-    if (code == SDL_SCANCODE_RETURN) {
-      actionTile(&p2); // Execute action associated to this tile
-      setTile(&p2);    // If unset, set new tile
     }
 
     // Rotate cannon
@@ -233,13 +202,34 @@ void input(SDL_Event* e) {
       rotateCannon(&p2, 1);
     }
 
+  } else if (e->type == SDL_KEYUP) {
+
+    SDL_Scancode code = e->key.keysym.scancode; 
+
+    //-------------P1------------\\
+
+    // Place tile or fire cannon
+    if (code == SDL_SCANCODE_SPACE) {
+      actionTile(&p1); // Execute action associated to this tile
+      setTile(&p1);    // If unset, set new tile
+    }
+
+    //-------------P2------------\\
+
+    // Place tile or fire cannon
+    if (code == SDL_SCANCODE_RETURN) {
+      actionTile(&p2); // Execute action associated to this tile
+      setTile(&p2);    // If unset, set new tile
+    }
+
   }
 }
 
 void update() {
 
-  // Increase ore
   Uint32 now = SDL_GetTicks();
+
+  // Increase ore
   if (now - lastSupplyTime >= SUPPLY_TIME) {
     p1.ore = p1.ore < MAX_SUPPLY ? p1.ore + 1 : MAX_SUPPLY;
     p2.ore = p2.ore < MAX_SUPPLY ? p2.ore + 1 : MAX_SUPPLY;
@@ -285,6 +275,19 @@ void update() {
       
     }
   }
+
+  // Surprise
+  if (surprise.alive) {
+
+    if (surprise.alpha <= 0) {
+      surprise.alive = false;
+      surprise.spawning = false;
+    }
+    else { surprise.alpha--; }
+
+  } else if (!surprise.spawning && now - surprise.lastSpawnTime >= surprise.nextSpawnTime){
+    spawnSurprise();
+  }
 }
 
 void render() {
@@ -292,9 +295,22 @@ void render() {
     // Clear screen
     SDL_RenderClear(renderer);
 
+    // Render player zones
+    renderBlueZone();
+    renderRedZone();
+
+    // Render suprise zone
+    renderSurpriseZone();
+
+    // Bg color
+    SDL_SetRenderDrawColor(renderer, 0xdf, 0xda, 0xd2, 0xff);
+
     // Render castles
     renderCastle(&p1);
     renderCastle(&p2);
+
+    // Render surprise
+    renderSurprise();
 
     // Render current tile
     renderTile(&p1);
@@ -308,12 +324,12 @@ void render() {
     renderBalls(&p1); 
     renderBalls(&p2); 
     
-    /*SDL_RendererFlip flip = zombies[i].dir == 1 ? SDL_FLIP_NONE : SDL_FLIP_HORIZONTAL;
-    SDL_RenderCopyEx(renderer, zombieTexture, &srcZombie, &dstZombie, 0, NULL, flip);*/
-
     // Render text
     renderOre(&p1);
     renderOre(&p2);
+
+    // Render winner text
+    renderWinnerText();
 
     // Update the screen
     SDL_RenderPresent(renderer);

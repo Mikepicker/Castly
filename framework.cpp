@@ -4,14 +4,14 @@ SDL_Renderer* renderer = NULL;
 // The window we'll be rendering to
 SDL_Window* window = NULL;
 
-// Font
-TTF_Font* font = NULL;
-
 // Init
 bool initFramework() {
 
   // Initialization flag
   bool success = true;
+
+  // Seed random number generator
+  srand(time(NULL));
 
   // Initialize SDL
   if(SDL_Init(SDL_INIT_VIDEO) < 0) {
@@ -21,7 +21,7 @@ bool initFramework() {
   else {
 
     // Create window
-    window = SDL_CreateWindow("Zombies", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
+    window = SDL_CreateWindow("Castrum", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
     if (window == NULL) {
       printf("Window could not be created! SDL_Error: %s\n", SDL_GetError());
       success = false;
@@ -33,9 +33,6 @@ bool initFramework() {
         printf("Renderer could not be created! SDL Error: %s\n", SDL_GetError());
         success = false;
       } else {
-
-        // Init renderer color
-        SDL_SetRenderDrawColor(renderer, 0xdf, 0xda, 0xd2, 0xff);
 
         // Init png loading
         int imgFlags = IMG_INIT_PNG;
@@ -64,11 +61,7 @@ void closeFramework() {
   SDL_DestroyWindow(window);
   renderer = NULL;
   window = NULL;
-
-  // Free font
-  TTF_CloseFont(font);
-  font = NULL;
-
+  
   // Quit SDL subsystems
   TTF_Quit();
   IMG_Quit();
