@@ -12,6 +12,8 @@ void initGame() {
   p1.team = BLUE;
   p1.ore = MINE_COST;
   p1.winner = false;
+  p1.leftBound = 0;
+  p1.rightBound = CASTLE_SIZE * 2 - 1;
 
   // Init p2
   p2.tile.texture = kingTexture;
@@ -24,15 +26,23 @@ void initGame() {
   p2.team = RED;
   p2.ore = MINE_COST;
   p2.winner = false;
+  p2.leftBound = -CASTLE_SIZE;
+  p2.rightBound = CASTLE_SIZE - 1;
 
   // Init castles
   for (Sint32 row = 0; row < CASTLE_SIZE; row++) {
     for (Sint32 col = 0; col < CASTLE_SIZE; col++) {
+
       p1.castle[row][col].alive = false;
       p2.castle[row][col].alive = false;
 
       p1.castle[row][col].team = BLUE;
       p2.castle[row][col].team = RED;
+
+      p1.castle[row][col].y = col;
+      p1.castle[row][col].x = row;
+      p2.castle[row][col].y = col;
+      p2.castle[row][col].x = row;
 
     }
   }
@@ -84,6 +94,16 @@ void normalizeAndScale(float x, float y, float* resX, float* resY, Sint32 scale)
   *resY = (y / mag) * scale;
 }
 
+// Get tile
+Tile* getTile(Player* p, Sint32 x, Sint32 y) {
+  
+  if (x < 0 || x > CASTLE_SIZE-1 || y < 0 || y > CASTLE_SIZE-1) {
+    return NULL;
+  }
+
+  return &p->castle[x][y];
+}
+
 // Set texture by type
 void setTexture(Tile* tile) {
 
@@ -118,6 +138,12 @@ Ball* getDeadBall(Player* p) {
   printf("No more balls!\n");
 }
 
+// Move actions
+void moveUp(Player* p) { if (p->tile.y > 0) { p->tile.y--; } }
+void moveDown(Player* p) { if (p->tile.y < CASTLE_SIZE-1) { p->tile.y++; } }
+void moveLeft(Player* p) { if (p->tile.x > p->leftBound) { p->tile.x--; } }
+void moveRight(Player* p) { if (p->tile.x < p->rightBound) { p->tile.x++; } }
+
 // Check if player can afford current tile
 bool buyTile(Player* p, TileType type) {
 
@@ -150,6 +176,7 @@ bool buyTile(Player* p, TileType type) {
   }
 
 }
+
 // Change tile
 void changeTile(Player* p) {
 
@@ -165,11 +192,11 @@ void changeTile(Player* p) {
 }
 
 // Place tile
-void setTile(Player* p) {
+Tile* setTile(Player* p) {
 
   // Out of zone
   if (p->tile.x < 0 || p->tile.x >= CASTLE_SIZE) {
-    return;
+    return NULL;
   }
 
   // Tile occupied
@@ -177,7 +204,10 @@ void setTile(Player* p) {
   if (!newTile->alive) {
 
     // Check costs
-    if (!buyTile(p, p->tile.type)) { return; }
+    if (!buyTile(p, p->tile.type)) { 
+      printf("[utils] no money, no honey\n");
+      return NULL;
+    }
 
     newTile->x = p->tile.x;
     newTile->y = p->tile.y;
@@ -197,7 +227,12 @@ void setTile(Player* p) {
       changeTile(p);
     }
 
+    return newTile;
+
   }
+
+  printf("[utils] tile occupied\n");
+  return NULL;
 
 }
 
@@ -215,7 +250,8 @@ void getSurprise(Player* p);
 void actionTile(Player* p) {
 
   // Get surprise
-  if (p->tile.x == surprise.x + CASTLE_SIZE && p->tile.y == surprise.y) {
+  Sint32 off = p == &p1 ? CASTLE_SIZE : -CASTLE_SIZE;
+  if (p->tile.x == surprise.x + off && p->tile.y == surprise.y) {
     getSurprise(p);
     return;
   }
@@ -476,11 +512,11 @@ void renderWinnerText() {
   std::string text;
 
   if (p1.winner) { 
-    text = "Blue wins!";
+    text = "Blue wins! - R to restart";
     textColor.b = 255; 
   }
   else if (p2.winner) {
-    text= "Red wins!";
+    text= "Red wins! - R to restart";
     textColor.r = 255; 
   }
   else { return; }
@@ -491,5 +527,49 @@ void renderWinnerText() {
 
   SDL_Rect dstScore = { .x = (SCREEN_WIDTH / 2) - (w / 2), .y = 100, .w = w, .h = h };
   SDL_RenderCopy(renderer, winnerText, NULL, &dstScore);
+
+}
+
+// Render main menu
+void renderMainMenu() {
+
+  SDL_Color textColor = { 0, 0, 0 };
+  std::string text;
+
+  if (p2.ai) {
+    text = "Player Vs AI";
+  } else {
+    text = "Player Vs Player";
+  }
+
+  if (menuEntrySelected == 0) { textColor.b = 255; }
+
+  // Render game mode
+  renderText(font, text, textColor, &playersText);
+  Sint32 w, h;
+  SDL_QueryTexture(playersText, NULL, NULL, &w, &h);
+
+  SDL_Rect dstScore = { .x = (SCREEN_WIDTH / 2) - (w / 2), .y = 100, .w = w, .h = h };
+  SDL_RenderCopy(renderer, playersText, NULL, &dstScore);
+
+  // Render start game
+  if (menuEntrySelected == 1) { textColor.b = 255; } 
+  else { textColor.b = 0; }
+
+  renderText(font, "Start Game", textColor, &startText);
+  SDL_QueryTexture(startText, NULL, NULL, &w, &h);
+
+  dstScore = { .x = (SCREEN_WIDTH / 2) - (w / 2), .y = 130, .w = w, .h = h };
+  SDL_RenderCopy(renderer, startText, NULL, &dstScore);
+
+  // Render exit
+  if (menuEntrySelected == 2) { textColor.b = 255; } 
+  else { textColor.b = 0; }
+
+  renderText(font, "Exit", textColor, &exitText);
+  SDL_QueryTexture(exitText, NULL, NULL, &w, &h);
+
+  dstScore = { .x = (SCREEN_WIDTH / 2) - (w / 2), .y = 160, .w = w, .h = h };
+  SDL_RenderCopy(renderer, exitText, NULL, &dstScore);
 
 }

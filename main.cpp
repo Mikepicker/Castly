@@ -1,11 +1,12 @@
 // Using SDL and standard IO
-#include <SDL2/SDL.h>
+#include <SDL.h>
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
 #include <stdio.h>
 #include <string>
 #include <stdlib.h> 
 #include <time.h> 
+#include <math.h>
 
 // Constants
 const Sint32 SCREEN_WIDTH = 768;
@@ -74,6 +75,7 @@ struct Ball {
 
 struct Player {
   Tile tile;
+  Sint32 leftBound, rightBound;
   Tile castle[CASTLE_SIZE][CASTLE_SIZE];
   Ball balls[MAX_BALLS];
   Team team;
@@ -83,6 +85,7 @@ struct Player {
   SDL_Texture* oreTexture;
   Sint32 castleOffset;
   bool winner;
+  bool ai;
 };
 
 struct Surprise {
@@ -104,8 +107,24 @@ bool keyDown = false;
 Sint32 lastSupplyTime = 0;
 SDL_Texture* winnerText;
 
+// Menu
+SDL_Texture* playersText;
+SDL_Texture* startText;
+SDL_Texture* exitText;
+Sint32 menuEntrySelected = 0;
+
+// Quit game
+bool quit = false;
+
+// Game state
+enum GameState {
+  STATE_MENU,
+  STATE_GAME
+} gameState;
+
 #include "framework.cpp"
 #include "utils.cpp"
+#include "ai.cpp"
 
 bool load() {
 
@@ -146,6 +165,9 @@ void close() {
     SDL_DestroyTexture(mineTexture);
     SDL_DestroyTexture(ballTexture);
     SDL_DestroyTexture(oreTexture);
+    SDL_DestroyTexture(winnerText);
+    SDL_DestroyTexture(p1.oreTexture);
+    SDL_DestroyTexture(p2.oreTexture);
 
     // Free font
     TTF_CloseFont(font);
@@ -154,7 +176,6 @@ void close() {
     closeFramework();
 }
 
-
 // Game logic
 void input(SDL_Event* e) {
 
@@ -162,70 +183,116 @@ void input(SDL_Event* e) {
 
     SDL_Scancode code = e->key.keysym.scancode; 
 
-    //-------------P1------------\\
-
-    // Move cursor
-    if (code == SDL_SCANCODE_W) {
-      if (p1.tile.y > 0) { p1.tile.y--; }
-    } else if (code == SDL_SCANCODE_S) {
-      if (p1.tile.y < CASTLE_SIZE-1) { p1.tile.y++; }
-    } else if (code == SDL_SCANCODE_A) {
-      if (p1.tile.x > 0) { p1.tile.x--; }
-    } else if (code == SDL_SCANCODE_D) {
-      if (p1.tile.x < CASTLE_SIZE * 2 - 1) { p1.tile.x++; }
+    if (p1.winner || p2.winner) {
+      if (code == SDL_SCANCODE_R) {
+        initGame();
+        if (p2.ai) { initAI(); }
+        return;
+      }
     }
 
-    // Rotate cannon
-    if (code == SDL_SCANCODE_G) {
-      rotateCannon(&p1, -1);
-    } else if (code == SDL_SCANCODE_H) {
-      rotateCannon(&p1, 1);
+    //------------MENU----------\\
+
+    if (gameState == STATE_MENU) {
+      if (code == SDL_SCANCODE_UP && menuEntrySelected > 0) {
+        menuEntrySelected--;
+      } else if (code == SDL_SCANCODE_DOWN && menuEntrySelected < 2) {
+        menuEntrySelected++;
+      }
+
+      if (code == SDL_SCANCODE_RETURN) {
+        if (menuEntrySelected == 0) {
+          p2.ai = !p2.ai;
+        } else if (menuEntrySelected == 1) {
+          initGame();
+          if (p2.ai) { initAI(); }
+          gameState = STATE_GAME;
+        } else if (menuEntrySelected == 2) {
+          quit = true;
+        }
+      }
     }
 
-    //-------------P2------------\\
+    if (gameState == STATE_GAME) {
 
-    // Move cursor
-    if (code == SDL_SCANCODE_UP) {
-      if (p2.tile.y > 0) { p2.tile.y--; }
-    } else if (code == SDL_SCANCODE_DOWN) {
-      if (p2.tile.y < CASTLE_SIZE-1) { p2.tile.y++; }
-    } else if (code == SDL_SCANCODE_LEFT) {
-      if (p2.tile.x > -CASTLE_SIZE) { p2.tile.x--; }
-    } else if (code == SDL_SCANCODE_RIGHT) {
-      if (p2.tile.x < CASTLE_SIZE-1) { p2.tile.x++; }
-    }
+      //-------------P1------------\\
 
-    // Rotate cannon
-    if (code == SDL_SCANCODE_O) {
-      rotateCannon(&p2, -1);
-    } else if (code == SDL_SCANCODE_P) {
-      rotateCannon(&p2, 1);
-    }
+      // Move cursor
+      if (code == SDL_SCANCODE_W) {
+        moveUp(&p1);
+      } else if (code == SDL_SCANCODE_S) {
+        moveDown(&p1);
+      } else if (code == SDL_SCANCODE_A) {
+        moveLeft(&p1);
+      } else if (code == SDL_SCANCODE_D) {
+        moveRight(&p1);
+      }
 
+      // Rotate cannon
+      if (code == SDL_SCANCODE_G) {
+        rotateCannon(&p1, -1);
+      } else if (code == SDL_SCANCODE_H) {
+        rotateCannon(&p1, 1);
+      }
+
+      //-------------P2------------\\
+
+      if (!p2.ai) {
+
+        // Move cursor
+        if (code == SDL_SCANCODE_UP) {
+          moveUp(&p2);
+        } else if (code == SDL_SCANCODE_DOWN) {
+          moveDown(&p2);
+        } else if (code == SDL_SCANCODE_LEFT) {
+          moveLeft(&p2);
+        } else if (code == SDL_SCANCODE_RIGHT) {
+          moveRight(&p2);
+        }
+
+        // Rotate cannon
+        if (code == SDL_SCANCODE_O) {
+          rotateCannon(&p2, -1);
+        } else if (code == SDL_SCANCODE_P) {
+          rotateCannon(&p2, 1);
+        }
+
+      }
+
+    }     
   } else if (e->type == SDL_KEYUP) {
 
-    SDL_Scancode code = e->key.keysym.scancode; 
+      SDL_Scancode code = e->key.keysym.scancode; 
 
-    //-------------P1------------\\
+      //-------------P1------------\\
 
-    // Place tile or fire cannon
-    if (code == SDL_SCANCODE_SPACE) {
-      actionTile(&p1); // Execute action associated to this tile
-      setTile(&p1);    // If unset, set new tile
-    }
+      // Place tile or fire cannon
+      if (code == SDL_SCANCODE_SPACE) {
+        actionTile(&p1); // Execute action associated to this tile
+        setTile(&p1);    // If unset, set new tile
+      }
 
-    //-------------P2------------\\
+      //-------------P2------------\\
 
-    // Place tile or fire cannon
-    if (code == SDL_SCANCODE_RETURN) {
-      actionTile(&p2); // Execute action associated to this tile
-      setTile(&p2);    // If unset, set new tile
-    }
+      if (!p2.ai) {
+
+        // Place tile or fire cannon
+        if (code == SDL_SCANCODE_RETURN) {
+          actionTile(&p2); // Execute action associated to this tile
+          setTile(&p2);    // If unset, set new tile
+        }
+
+      }
 
   }
+
 }
 
 void update() {
+
+  if (gameState != STATE_GAME) {
+    return;
+  }
 
   Uint32 now = SDL_GetTicks();
 
@@ -288,6 +355,11 @@ void update() {
   } else if (!surprise.spawning && now - surprise.lastSpawnTime >= surprise.nextSpawnTime){
     spawnSurprise();
   }
+
+  // Update AI
+  if (p2.ai) {
+    updateAI();
+  }
 }
 
 void render() {
@@ -305,32 +377,41 @@ void render() {
     // Bg color
     SDL_SetRenderDrawColor(renderer, 0xdf, 0xda, 0xd2, 0xff);
 
-    // Render castles
-    renderCastle(&p1);
-    renderCastle(&p2);
+    if (gameState == STATE_GAME) {
 
-    // Render surprise
-    renderSurprise();
+      // Render castles
+      renderCastle(&p1);
+      renderCastle(&p2);
 
-    // Render current tile
-    renderTile(&p1);
-    renderTile(&p2);
+      // Render surprise
+      renderSurprise();
 
-    // Render cursors
-    renderCursor(&p1);
-    renderCursor(&p2);
-    
-    // Render balls
-    renderBalls(&p1); 
-    renderBalls(&p2); 
-    
-    // Render text
-    renderOre(&p1);
-    renderOre(&p2);
+      // Render current tile
+      renderTile(&p1);
+      renderTile(&p2);
 
-    // Render winner text
-    renderWinnerText();
+      // Render cursors
+      renderCursor(&p1);
+      renderCursor(&p2);
 
+      // Render balls
+      renderBalls(&p1); 
+      renderBalls(&p2); 
+
+      // Render text
+      renderOre(&p1);
+      renderOre(&p2);
+
+      // Render winner text
+      renderWinnerText();
+
+    } else if (gameState == STATE_MENU) {
+
+      // Render menu
+      renderMainMenu();
+
+    }
+   
     // Update the screen
     SDL_RenderPresent(renderer);
 }
@@ -347,9 +428,6 @@ int main(Sint32 argc, char* args[]) {
 			printf("Failed to load media!\n");
 		}
 		else {
-
-      // Main loop flag
-      bool quit = false;
 
       // Event handler
       SDL_Event e;
@@ -377,7 +455,6 @@ int main(Sint32 argc, char* args[]) {
 
         // Update game
         update();
-
 
         // Render game
         render();
