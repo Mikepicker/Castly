@@ -1,5 +1,9 @@
 // Using SDL and standard IO
+#ifdef LINUX
+#include <SDL2/SDL.h>
+#elif WIN
 #include <SDL.h>
+#endif
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
 #include <stdio.h>
@@ -14,6 +18,11 @@ const Sint32 SCREEN_HEIGHT = 512;
 const Sint32 TILE_SIZE = 32;
 const Sint32 CASTLE_SIZE = 8;
 const Sint32 MAX_BALLS = 16;
+const Sint32 MAX_CLOUDS = 32;
+const Sint32 CLOUDS_MIN_SPEED = 10;
+const Sint32 CLOUDS_MAX_SPEED = 50;
+const Sint32 CLOUDS_MIN_LIFETIME = 6;
+const Sint32 CLOUDS_MAX_LIFETIME = 12;
 const Sint32 BALL_SPEED = 20;
 const Sint32 MAX_SUPPLY = 100;
 const Sint32 SUPPLY_TIME = 1000;
@@ -36,6 +45,10 @@ SDL_Texture* kingTexture;
 SDL_Texture* mineTexture;
 SDL_Texture* ballTexture;
 SDL_Texture* oreTexture;
+SDL_Texture* cloudTexture;
+SDL_Texture* placeholderTexture;
+SDL_Texture* grassTexture;
+SDL_Texture* logoTexture;
 
 // Font
 TTF_Font* font = NULL;
@@ -97,13 +110,22 @@ struct Surprise {
   Uint32 nextSpawnTime;
 } surprise;
 
+struct Cloud {
+  Sint32 x, y;
+  float vx, vy;
+  Sint32 size;
+  Sint32 startTime;
+  Sint32 lifeTime;
+  float alpha;
+};
+
 struct World {
   float gravity = 0.5f;
 } world;
 
 // Variables
 Player p1, p2;
-bool keyDown = false;
+Cloud clouds[MAX_CLOUDS];
 Sint32 lastSupplyTime = 0;
 SDL_Texture* winnerText;
 
@@ -147,6 +169,10 @@ bool load() {
     kingTexture = loadTexture("assets/king.png");
     ballTexture = loadTexture("assets/ball.png");
     oreTexture = loadTexture("assets/ore.png");
+    cloudTexture = loadTexture("assets/cloud.png");
+    placeholderTexture = loadTexture("assets/placeholder.png");
+    grassTexture = loadTexture("assets/grass.png");
+    logoTexture = loadTexture("assets/logo.png");
 
     initGame();
 
@@ -168,6 +194,15 @@ void close() {
     SDL_DestroyTexture(winnerText);
     SDL_DestroyTexture(p1.oreTexture);
     SDL_DestroyTexture(p2.oreTexture);
+    SDL_DestroyTexture(cloudTexture);
+    SDL_DestroyTexture(placeholderTexture);
+    SDL_DestroyTexture(grassTexture);
+    SDL_DestroyTexture(logoTexture);
+
+    SDL_DestroyTexture(winnerText);
+    SDL_DestroyTexture(playersText);
+    SDL_DestroyTexture(startText);
+    SDL_DestroyTexture(exitText);
 
     // Free font
     TTF_CloseFont(font);
@@ -179,12 +214,102 @@ void close() {
 // Game logic
 void input(SDL_Event* e) {
 
-  if (e->type == SDL_KEYDOWN) {
+  bool gamepad1Left = false;
+  bool gamepad1Right = false;
+  bool gamepad1Up = false;
+  bool gamepad1Down = false;
+  bool gamepad2Left = false;
+  bool gamepad2Right = false;
+  bool gamepad2Up = false;
+  bool gamepad2Down = false;
+
+
+  if (e->type == SDL_JOYAXISMOTION) {
+    if (e->jaxis.which == 0) {
+
+      // X axis
+      if (e->jaxis.axis == 0) {
+
+        if (e->jaxis.value > 0) {
+          gamepad1Right = true;
+        } else if (e->jaxis.value < 0) {
+          gamepad1Left = true;
+        }
+
+      // Y axis
+      } else if (e->jaxis.axis == 1) {
+        
+        if (e->jaxis.value > 0) {
+          gamepad1Down = true;
+        } else if (e->jaxis.value < 0) {
+          gamepad1Up = true;
+        }
+
+      }
+    } else if (e->jaxis.which == 1) {
+
+      // X axis
+      if (e->jaxis.axis == 0) {
+
+        if (e->jaxis.value > 0) {
+          gamepad2Right = true;
+        } else if (e->jaxis.value < 0) {
+          gamepad2Left = true;
+        }
+
+        // Y axis
+      } else if (e->jaxis.axis == 1) {
+
+        if (e->jaxis.value > 0) {
+          gamepad2Down = true;
+        } else if (e->jaxis.value < 0) {
+          gamepad2Up = true;
+        }
+
+      }
+    }
+  }
+
+  bool gamepad1Enter = false;
+  bool gamepad1RotateLeft = false;
+  bool gamepad1RotateRight = false;
+  bool gamepad2Enter = false;
+  bool gamepad2RotateLeft = false;
+  bool gamepad2RotateRight = false;
+
+
+  // Gamepad 1
+  if (e->jaxis.which == 0) {
+
+    if (e->type == SDL_JOYBUTTONDOWN) {
+
+      if (e->jbutton.button == 4) { gamepad1RotateLeft = true; }
+      else if (e->jbutton.button == 5) { gamepad1RotateRight = true; }
+
+    } else if (e->type == SDL_JOYBUTTONUP) {
+      if (e->jbutton.button == 3) { gamepad1Enter = true; }
+    }
+
+  } else if (e->jaxis.which == 1) {
+
+    if (e->type == SDL_JOYBUTTONDOWN) {
+
+      if (e->jbutton.button == 4) { gamepad2RotateLeft = true; }
+      else if (e->jbutton.button == 5) { gamepad2RotateRight = true; }
+
+    } else if (e->type == SDL_JOYBUTTONUP) {
+      if (e->jbutton.button == 3) { gamepad2Enter = true; }
+    }
+
+  }
+
+  if (e->type == SDL_JOYAXISMOTION || e->type == SDL_JOYBUTTONDOWN || e->type == SDL_KEYDOWN) {
 
     SDL_Scancode code = e->key.keysym.scancode; 
 
     if (p1.winner || p2.winner) {
       if (code == SDL_SCANCODE_R) {
+        gameState = STATE_MENU;
         initGame();
         if (p2.ai) { initAI(); }
         return;
@@ -194,13 +319,20 @@ void input(SDL_Event* e) {
     //------------MENU----------\\
 
     if (gameState == STATE_MENU) {
-      if (code == SDL_SCANCODE_UP && menuEntrySelected > 0) {
+
+      bool gamepadPressed = false;
+      if (e->type == SDL_JOYBUTTONDOWN) {
+        printf("%d\n", e->jbutton.button);
+        gamepadPressed = true;
+      }
+      
+      if ((gamepad1Up || code == SDL_SCANCODE_UP) && menuEntrySelected > 0) {
         menuEntrySelected--;
-      } else if (code == SDL_SCANCODE_DOWN && menuEntrySelected < 2) {
+      } else if ((gamepad1Down || code == SDL_SCANCODE_DOWN) && menuEntrySelected < 2) {
         menuEntrySelected++;
       }
 
-      if (code == SDL_SCANCODE_RETURN) {
+      if (gamepadPressed || code == SDL_SCANCODE_RETURN) {
         if (menuEntrySelected == 0) {
           p2.ai = !p2.ai;
         } else if (menuEntrySelected == 1) {
@@ -215,23 +347,24 @@ void input(SDL_Event* e) {
 
     if (gameState == STATE_GAME) {
 
+      
       //-------------P1------------\\
 
       // Move cursor
-      if (code == SDL_SCANCODE_W) {
+      if (gamepad1Up || code == SDL_SCANCODE_W) {
         moveUp(&p1);
-      } else if (code == SDL_SCANCODE_S) {
+      } else if (gamepad1Down || code == SDL_SCANCODE_S) {
         moveDown(&p1);
-      } else if (code == SDL_SCANCODE_A) {
+      } else if (gamepad1Left || code == SDL_SCANCODE_A) {
         moveLeft(&p1);
-      } else if (code == SDL_SCANCODE_D) {
+      } else if (gamepad1Right || code == SDL_SCANCODE_D) {
         moveRight(&p1);
       }
 
       // Rotate cannon
-      if (code == SDL_SCANCODE_G) {
+      if (gamepad1RotateLeft || code == SDL_SCANCODE_G) {
         rotateCannon(&p1, -1);
-      } else if (code == SDL_SCANCODE_H) {
+      } else if (gamepad1RotateRight || code == SDL_SCANCODE_H) {
         rotateCannon(&p1, 1);
       }
 
@@ -240,34 +373,34 @@ void input(SDL_Event* e) {
       if (!p2.ai) {
 
         // Move cursor
-        if (code == SDL_SCANCODE_UP) {
+        if (gamepad2Up || code == SDL_SCANCODE_UP) {
           moveUp(&p2);
-        } else if (code == SDL_SCANCODE_DOWN) {
+        } else if (gamepad2Down || code == SDL_SCANCODE_DOWN) {
           moveDown(&p2);
-        } else if (code == SDL_SCANCODE_LEFT) {
+        } else if (gamepad2Left || code == SDL_SCANCODE_LEFT) {
           moveLeft(&p2);
-        } else if (code == SDL_SCANCODE_RIGHT) {
+        } else if (gamepad2Right || code == SDL_SCANCODE_RIGHT) {
           moveRight(&p2);
         }
 
         // Rotate cannon
-        if (code == SDL_SCANCODE_O) {
+        if (gamepad2RotateLeft || code == SDL_SCANCODE_O) {
           rotateCannon(&p2, -1);
-        } else if (code == SDL_SCANCODE_P) {
+        } else if (gamepad2RotateRight || code == SDL_SCANCODE_P) {
           rotateCannon(&p2, 1);
         }
 
       }
 
     }     
-  } else if (e->type == SDL_KEYUP) {
+  } else if (e->type == SDL_JOYBUTTONUP || e->type == SDL_KEYUP) {
 
       SDL_Scancode code = e->key.keysym.scancode; 
 
       //-------------P1------------\\
 
       // Place tile or fire cannon
-      if (code == SDL_SCANCODE_SPACE) {
+      if (gamepad1Enter || code == SDL_SCANCODE_SPACE) {
         actionTile(&p1); // Execute action associated to this tile
         setTile(&p1);    // If unset, set new tile
       }
@@ -277,7 +410,7 @@ void input(SDL_Event* e) {
       if (!p2.ai) {
 
         // Place tile or fire cannon
-        if (code == SDL_SCANCODE_RETURN) {
+        if (gamepad2Enter || code == SDL_SCANCODE_RETURN) {
           actionTile(&p2); // Execute action associated to this tile
           setTile(&p2);    // If unset, set new tile
         }
@@ -290,11 +423,34 @@ void input(SDL_Event* e) {
 
 void update() {
 
+  Uint32 now = SDL_GetTicks();
+
+  // Update clouds
+  for (Sint32 i = 0; i < MAX_CLOUDS; i++) {
+    Sint32 lifeTime = now - clouds[i].startTime;
+    if (lifeTime >= clouds[i].lifeTime) {
+      clouds[i].size = randInRange(16, 64);
+      clouds[i].vx = (float)randInRange(CLOUDS_MIN_SPEED, CLOUDS_MAX_SPEED) / 10.0f;
+      clouds[i].x = randInRange(-400, SCREEN_WIDTH / 2);
+      clouds[i].y = randInRange(60, 140);
+      clouds[i].startTime = now;
+      clouds[i].alpha = 0;
+      clouds[i].lifeTime = randInRange(4000, 16000);
+    }
+
+    clouds[i].x += clouds[i].vx;
+    if (lifeTime < 1000) {
+      clouds[i].alpha = lerp(0, 255, ((float)lifeTime)/1000);
+    } else if (lifeTime > 3000) {
+      clouds[i].alpha = lerp(255, 0, ((float)(lifeTime-3000))/1000);
+    }
+
+    if (clouds[i].alpha < 0) { clouds[i].alpha = 0; }
+  }
+  
   if (gameState != STATE_GAME) {
     return;
   }
-
-  Uint32 now = SDL_GetTicks();
 
   // Increase ore
   if (now - lastSupplyTime >= SUPPLY_TIME) {
@@ -367,22 +523,21 @@ void render() {
     // Clear screen
     SDL_RenderClear(renderer);
 
-    // Render player zones
-    renderBlueZone();
-    renderRedZone();
-
     // Render suprise zone
-    renderSurpriseZone();
+    //renderSurpriseZone();
 
     // Bg color
-    SDL_SetRenderDrawColor(renderer, 0xdf, 0xda, 0xd2, 0xff);
+    SDL_SetRenderDrawColor(renderer, 0x63, 0x9b, 0xff, 0xff);
+
+    // Render clouds
+    renderClouds();
+
+    // Render castles
+    renderCastle(&p1);
+    renderCastle(&p2);
 
     if (gameState == STATE_GAME) {
-
-      // Render castles
-      renderCastle(&p1);
-      renderCastle(&p2);
-
+      
       // Render surprise
       renderSurprise();
 

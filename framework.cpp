@@ -4,6 +4,9 @@ SDL_Renderer* renderer = NULL;
 // The window we'll be rendering to
 SDL_Window* window = NULL;
 
+SDL_Joystick* gamepad1 = NULL;
+SDL_Joystick* gamepad2 = NULL;
+
 // Init
 bool initFramework() {
 
@@ -14,14 +17,14 @@ bool initFramework() {
   srand(time(NULL));
 
   // Initialize SDL
-  if(SDL_Init(SDL_INIT_VIDEO) < 0) {
+  if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK) < 0) {
     printf("SDL could not initialize! SDL_Error: %s\n", SDL_GetError());
     success = false;
   }
   else {
 
     // Create window
-    window = SDL_CreateWindow("Castrum", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
+    window = SDL_CreateWindow("Castly", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
     if (window == NULL) {
       printf("Window could not be created! SDL_Error: %s\n", SDL_GetError());
       success = false;
@@ -41,10 +44,28 @@ bool initFramework() {
           success = false;
         }
 
-        //Initialize SDL_ttf
+        // Initialize SDL_ttf
         if(TTF_Init() == -1) {
           printf( "SDL_ttf could not initialize! SDL_ttf Error: %s\n", TTF_GetError() );
           success = false;
+        }
+
+        // Initialize joystick
+        if (SDL_NumJoysticks() < 1) {
+          printf("[framework] warning, no joystick connected\n");
+        } else {
+
+          gamepad1 = SDL_JoystickOpen(0);
+
+          if (gamepad1 == NULL) {
+            printf("[framework] warning: unable to open game controller 1! SDL Error: %s\n", SDL_GetError());
+          }
+
+          gamepad2 = SDL_JoystickOpen(1);
+
+          if (gamepad2 == NULL) {
+            printf("[framework] warning: unable to open game controller 2! SDL Error: %s\n", SDL_GetError());
+          }
         }
       }
     }
@@ -56,11 +77,18 @@ bool initFramework() {
 // Init
 void closeFramework() {
 
-  //Destroy window
+  // Destroy window
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);
   renderer = NULL;
   window = NULL;
+
+  // Close game controllers
+  SDL_JoystickClose(gamepad1);
+  gamepad1 = NULL;
+  SDL_JoystickClose(gamepad2);
+  gamepad2 = NULL;
+
   
   // Quit SDL subsystems
   TTF_Quit();
@@ -146,4 +174,8 @@ bool collision(SDL_Rect a, SDL_Rect b) {
 
 int randInRange(int min, int max) {
   return rand() % (max + 1 - min) + min;
+}
+
+float lerp(float v0, float v1, float t) {
+  return (1 - t) * v0 + t * v1;
 }

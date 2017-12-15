@@ -1,4 +1,4 @@
-const Uint32 THINK_TIME = 100;
+const Uint32 THINK_TIME = 200;
 const Sint32 QUEUE_SIZE = 8;
 
 enum ActionType {

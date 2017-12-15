@@ -59,6 +59,17 @@ void initGame() {
   surprise.alive = false;
   surprise.spawning = false;
 
+  // Init clouds
+  for (Sint32 i = 0; i < MAX_CLOUDS; i++) {
+    clouds[i].size = randInRange(16, 64);
+    clouds[i].vx = (float)randInRange(CLOUDS_MIN_SPEED, CLOUDS_MAX_SPEED) / 10.0f;
+    clouds[i].x = randInRange(-400, SCREEN_WIDTH / 2);
+    clouds[i].y = randInRange(60, 140);
+    clouds[i].alpha = 255;
+    clouds[i].startTime = SDL_GetTicks() + randInRange(0, 16000);
+    clouds[i].lifeTime = randInRange(4000, 16000);
+  }
+
 }
 
 // From castle to screen coordinates
@@ -378,6 +389,10 @@ void renderCastle(Player* p) {
   for (Sint32 row = 0; row < CASTLE_SIZE; row++) {
     for (Sint32 col = 0; col < CASTLE_SIZE; col++) {
       Tile* tile = &p->castle[row][col];
+      
+      Sint32 x, y;
+      castleToScreen(p, tile->x, tile->y, &x, &y);
+
       if (tile->alive) {
 
         double angle = 0;
@@ -389,10 +404,10 @@ void renderCastle(Player* p) {
 
         }
 
-        Sint32 x, y;
-        castleToScreen(p, tile->x, tile->y, &x, &y);
-        
+                
         renderTexture(tile->texture, x, y, TILE_SIZE, TILE_SIZE, angle, 255);
+      } else {
+        renderTexture(placeholderTexture, x, y, TILE_SIZE, TILE_SIZE, 0, 100);
       }
     }
   }
@@ -460,36 +475,6 @@ void renderOre(Player* p) {
 
 }
 
-// Render blue zone
-void renderBlueZone() {
-  
-  SDL_Rect r;
-  r.x = 0;
-  r.y = SCREEN_HEIGHT - CASTLE_SIZE * TILE_SIZE;
-  r.w = CASTLE_SIZE * TILE_SIZE;
-  r.h = CASTLE_SIZE * TILE_SIZE;
-
-  SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-  SDL_SetRenderDrawColor(renderer, 0, 0, 255, 20);
-  SDL_RenderFillRect(renderer, &r);
-
-}
-
-// Render red zone
-void renderRedZone() {
-
-  SDL_Rect r;
-  r.x = p2.castleOffset;
-  r.y = SCREEN_HEIGHT - CASTLE_SIZE * TILE_SIZE;
-  r.w = CASTLE_SIZE * TILE_SIZE;
-  r.h = CASTLE_SIZE * TILE_SIZE;
-
-  SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-  SDL_SetRenderDrawColor(renderer, 255, 0, 0, 20);
-  SDL_RenderFillRect(renderer, &r);
-
-}
-
 // Render surprise zone
 void renderSurpriseZone() {
 
@@ -499,10 +484,26 @@ void renderSurpriseZone() {
   r.w = SCREEN_WIDTH - CASTLE_SIZE * TILE_SIZE * 2;
   r.h = CASTLE_SIZE * TILE_SIZE;
 
-  SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-  SDL_SetRenderDrawColor(renderer, 0, 255, 0, 20);
-  SDL_RenderFillRect(renderer, &r);
+  //SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+  //SDL_SetRenderDrawColor(renderer, 0, 255, 0, 20);
+  //SDL_RenderFillRect(renderer, &r);
+  
+  for (Sint32 row = 0; row < CASTLE_SIZE; row++) {
+    for (Sint32 col = 0; col < CASTLE_SIZE; col++) {
+      Sint32 x = TILE_SIZE * CASTLE_SIZE + TILE_SIZE * row;
+      Sint32 y = SCREEN_HEIGHT - CASTLE_SIZE * TILE_SIZE + TILE_SIZE * col;
+      renderTexture(grassTexture, x, y, TILE_SIZE, TILE_SIZE, 0, 255);
+    }
+  }
 
+}
+
+// Render clouds
+void renderClouds() {
+  
+  for (Sint32 i = 0; i < MAX_CLOUDS; i++) {
+    renderTexture(cloudTexture, clouds[i].x, clouds[i].y, clouds[i].size, clouds[i].size, 0, clouds[i].alpha);
+  }
 }
 
 // Render winner text
@@ -533,7 +534,10 @@ void renderWinnerText() {
 // Render main menu
 void renderMainMenu() {
 
-  SDL_Color textColor = { 0, 0, 0 };
+  SDL_Color unselectedColor = { 0, 0, 0 };
+  SDL_Color selectedColor = { 172, 50, 50 };
+  SDL_Color currentColor;
+
   std::string text;
 
   if (p2.ai) {
@@ -542,10 +546,11 @@ void renderMainMenu() {
     text = "Player Vs Player";
   }
 
-  if (menuEntrySelected == 0) { textColor.b = 255; }
+  currentColor = unselectedColor;
+  if (menuEntrySelected == 0) { currentColor = selectedColor; }
 
   // Render game mode
-  renderText(font, text, textColor, &playersText);
+  renderText(font, text, currentColor, &playersText);
   Sint32 w, h;
   SDL_QueryTexture(playersText, NULL, NULL, &w, &h);
 
@@ -553,23 +558,26 @@ void renderMainMenu() {
   SDL_RenderCopy(renderer, playersText, NULL, &dstScore);
 
   // Render start game
-  if (menuEntrySelected == 1) { textColor.b = 255; } 
-  else { textColor.b = 0; }
+  currentColor = unselectedColor;
+  if (menuEntrySelected == 1) { currentColor = selectedColor; } 
 
-  renderText(font, "Start Game", textColor, &startText);
+  renderText(font, "Start Game", currentColor, &startText);
   SDL_QueryTexture(startText, NULL, NULL, &w, &h);
 
   dstScore = { .x = (SCREEN_WIDTH / 2) - (w / 2), .y = 130, .w = w, .h = h };
   SDL_RenderCopy(renderer, startText, NULL, &dstScore);
 
   // Render exit
-  if (menuEntrySelected == 2) { textColor.b = 255; } 
-  else { textColor.b = 0; }
+  currentColor = unselectedColor;
+  if (menuEntrySelected == 2) { currentColor = selectedColor; } 
 
-  renderText(font, "Exit", textColor, &exitText);
+  renderText(font, "Exit", currentColor, &exitText);
   SDL_QueryTexture(exitText, NULL, NULL, &w, &h);
 
   dstScore = { .x = (SCREEN_WIDTH / 2) - (w / 2), .y = 160, .w = w, .h = h };
   SDL_RenderCopy(renderer, exitText, NULL, &dstScore);
+
+  // Render logo
+  renderTexture(logoTexture, (SCREEN_WIDTH / 2) - 32, 64, 64, 32, 0, 255);
 
 }
