@@ -12,9 +12,10 @@
 #include <time.h> 
 #include <math.h>
 
+#include "framework.cpp"
+#include "particles.cpp"
+
 // Constants
-const Sint32 SCREEN_WIDTH = 768;
-const Sint32 SCREEN_HEIGHT = 512;
 const Sint32 TILE_SIZE = 32;
 const Sint32 CASTLE_SIZE = 8;
 const Sint32 MAX_BALLS = 16;
@@ -77,6 +78,7 @@ struct Tile {
   double angle;
 };
 
+struct Emitter;
 struct Ball {
   Sint32 x, y;
   float vx, vy;
@@ -84,6 +86,7 @@ struct Ball {
   double angle;
   bool collide;
   Tile* cannonTile;
+  Emitter* emitter;
 };
 
 struct Player {
@@ -144,7 +147,6 @@ enum GameState {
   STATE_GAME
 } gameState;
 
-#include "framework.cpp"
 #include "utils.cpp"
 #include "ai.cpp"
 
@@ -175,6 +177,7 @@ bool load() {
     logoTexture = loadTexture("assets/logo.png");
 
     initGame();
+    initParticles();
 
     return success;
 }
@@ -207,6 +210,8 @@ void close() {
     // Free font
     TTF_CloseFont(font);
     font = NULL;
+
+    closeParticles();
 
     closeFramework();
 }
@@ -346,7 +351,6 @@ void input(SDL_Event* e) {
     }
 
     if (gameState == STATE_GAME) {
-
       
       //-------------P1------------\\
 
@@ -393,7 +397,7 @@ void input(SDL_Event* e) {
       }
 
     }     
-  } else if (e->type == SDL_JOYBUTTONUP || e->type == SDL_KEYUP) {
+  } else if (gameState == STATE_GAME && (e->type == SDL_JOYBUTTONUP || e->type == SDL_KEYUP)) {
 
       SDL_Scancode code = e->key.keysym.scancode; 
 
@@ -468,6 +472,7 @@ void update() {
 
       if (p1.balls[i].y > SCREEN_HEIGHT) {
         p1.balls[i].alive = false;
+        p1.balls[i].emitter->alive = false;
         continue;
       }
 
@@ -475,6 +480,9 @@ void update() {
       p1.balls[i].x += p1.balls[i].vx;
       p1.balls[i].y += p1.balls[i].vy;
 
+      p1.balls[i].emitter->x = p1.balls[i].x;
+      p1.balls[i].emitter->y = p1.balls[i].y;
+      
       handleBallCollision(&p1, &p1.balls[i]);
       handleBallCollision(&p2, &p1.balls[i]);
 
@@ -486,12 +494,16 @@ void update() {
 
       if (p2.balls[i].y > SCREEN_HEIGHT) {
         p2.balls[i].alive = false;
+        p2.balls[i].emitter->alive = false;
         continue;
       }
 
       p2.balls[i].vy += world.gravity;
       p2.balls[i].x += p2.balls[i].vx;
       p2.balls[i].y += p2.balls[i].vy;
+
+      p2.balls[i].emitter->x = p2.balls[i].x;
+      p2.balls[i].emitter->y = p2.balls[i].y;
 
       handleBallCollision(&p2, &p2.balls[i]);
       handleBallCollision(&p1, &p2.balls[i]);
@@ -511,6 +523,9 @@ void update() {
   } else if (!surprise.spawning && now - surprise.lastSpawnTime >= surprise.nextSpawnTime){
     spawnSurprise();
   }
+
+  // Update particles
+  updateParticles();
 
   // Update AI
   if (p2.ai) {
@@ -552,6 +567,9 @@ void render() {
       // Render balls
       renderBalls(&p1); 
       renderBalls(&p2); 
+
+      // Render particles
+      renderParticles();
 
       // Render text
       renderOre(&p1);

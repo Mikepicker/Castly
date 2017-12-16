@@ -289,6 +289,9 @@ void actionTile(Player* p) {
 
         normalizeAndScale(cos(castleTile->angle * PI / 180), sin(castleTile->angle * PI / 180), &(ball->vx), &(ball->vy), BALL_SPEED);
 
+        // Emitter
+        ball->emitter = createEmitter(ball->x, ball->y + 2);
+
         ball->cannonTile = castleTile;
         ball->collide = false;
         ball->alive = true;
@@ -339,6 +342,7 @@ void handleBallCollision(Player* p, Ball* ball) {
         
         castleTile->alive = false;
         ball->alive = false;
+        ball->emitter->alive = false;
       }
     }
 

@@ -1,3 +1,6 @@
+const Sint32 SCREEN_WIDTH = 768;
+const Sint32 SCREEN_HEIGHT = 512;
+
 // Renderer
 SDL_Renderer* renderer = NULL;
 
