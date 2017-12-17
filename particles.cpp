@@ -1,21 +1,22 @@
 const Sint32 MAX_EMITTERS = 64;
 const Sint32 MAX_PARTICLES = 128;
-const Sint32 PARTICLES_SPAWN_TIME = 10;
+const Sint32 PARTICLES_SPAWN_TIME = 0.1;
 
 Sint32 w, h;
 SDL_Texture* particleTexture;
 
 struct Particle {
   Sint32 x, y;
+  Sint32 angle;
   Uint8 alpha;
   bool alive;
 };
 
 struct Emitter {
   Sint32 x, y;
-  Sint32 vx, vy;
+  Sint32 angle;
   Sint32 amount;
-  Sint32 lastSpawnTime;
+  Sint32 lastEmitTime;
   bool alive;
 };
 
@@ -34,7 +35,7 @@ Emitter* createEmitter(Sint32 x, Sint32 y) {
       emitter->x = x;
       emitter->y = y;
       emitter->alive = true;
-      emitter->lastSpawnTime = 0;
+      emitter->lastEmitTime = 0;
       return emitter;
 
     }
@@ -61,11 +62,12 @@ void emit(Emitter* emitter) {
   Particle* particle = getDeadParticle();
 
   if (particle) {
-    particle->x = emitter->x + randInRange(-2, 2);
-    particle->y = emitter->y + randInRange(-2, 2);
+    particle->x = emitter->x; // + randInRange(-2, 2);
+    particle->y = emitter->y; // + randInRange(-2, 2);
     particle->alpha = 100;
+    particle->angle = emitter->angle;
     particle->alive = true;
-    emitter->lastSpawnTime = SDL_GetTicks();
+    emitter->lastEmitTime = SDL_GetTicks();
   }
   
 }
@@ -98,9 +100,8 @@ void updateParticles() {
     Emitter* emitter = &emitters[i];
 
     if (!emitter->alive) { continue; }
-    //printf("TEEEEEEEST %d\n", SDL_GetTicks());
 
-    if (now - emitter->lastSpawnTime >= PARTICLES_SPAWN_TIME) { emit(emitter); }
+    if (now - emitter->lastEmitTime >= PARTICLES_SPAWN_TIME) { emit(emitter); }
 
   }
 
@@ -127,7 +128,7 @@ void renderParticles() {
 
     if (!particle->alive) { continue; }
     
-    renderTexture(particleTexture, particle->x, particle->y, w, h, 0, particle->alpha);
+    renderTexture(particleTexture, particle->x, particle->y, w, h, particle->angle, particle->alpha);
 
   }
 

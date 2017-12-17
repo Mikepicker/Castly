@@ -48,7 +48,6 @@ SDL_Texture* ballTexture;
 SDL_Texture* oreTexture;
 SDL_Texture* cloudTexture;
 SDL_Texture* placeholderTexture;
-SDL_Texture* grassTexture;
 SDL_Texture* logoTexture;
 
 // Font
@@ -136,6 +135,7 @@ SDL_Texture* winnerText;
 SDL_Texture* playersText;
 SDL_Texture* startText;
 SDL_Texture* exitText;
+SDL_Texture* creditsText;
 Sint32 menuEntrySelected = 0;
 
 // Quit game
@@ -173,7 +173,6 @@ bool load() {
     oreTexture = loadTexture("assets/ore.png");
     cloudTexture = loadTexture("assets/cloud.png");
     placeholderTexture = loadTexture("assets/placeholder.png");
-    grassTexture = loadTexture("assets/grass.png");
     logoTexture = loadTexture("assets/logo.png");
 
     initGame();
@@ -199,13 +198,13 @@ void close() {
     SDL_DestroyTexture(p2.oreTexture);
     SDL_DestroyTexture(cloudTexture);
     SDL_DestroyTexture(placeholderTexture);
-    SDL_DestroyTexture(grassTexture);
     SDL_DestroyTexture(logoTexture);
 
     SDL_DestroyTexture(winnerText);
     SDL_DestroyTexture(playersText);
     SDL_DestroyTexture(startText);
     SDL_DestroyTexture(exitText);
+    SDL_DestroyTexture(creditsText);
 
     // Free font
     TTF_CloseFont(font);
@@ -482,6 +481,10 @@ void update() {
 
       p1.balls[i].emitter->x = p1.balls[i].x;
       p1.balls[i].emitter->y = p1.balls[i].y;
+
+      float vx = p1.balls[i].vx == 0 ? 0.001 : p1.balls[i].vx;
+      float vy = p1.balls[i].vy;
+      p1.balls[i].emitter->angle = atan2(vy, vx) * 180 / PI;
       
       handleBallCollision(&p1, &p1.balls[i]);
       handleBallCollision(&p2, &p1.balls[i]);
@@ -504,6 +507,10 @@ void update() {
 
       p2.balls[i].emitter->x = p2.balls[i].x;
       p2.balls[i].emitter->y = p2.balls[i].y;
+
+      float vx = p2.balls[i].vx == 0 ? 0.001 : p2.balls[i].vx;
+      float vy = p2.balls[i].vy;
+      p2.balls[i].emitter->angle = atan2(vy, vx) * 180 / PI;
 
       handleBallCollision(&p2, &p2.balls[i]);
       handleBallCollision(&p1, &p2.balls[i]);

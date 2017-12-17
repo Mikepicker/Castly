@@ -479,29 +479,6 @@ void renderOre(Player* p) {
 
 }
 
-// Render surprise zone
-void renderSurpriseZone() {
-
-  SDL_Rect r;
-  r.x = TILE_SIZE * CASTLE_SIZE;
-  r.y = SCREEN_HEIGHT - CASTLE_SIZE * TILE_SIZE;
-  r.w = SCREEN_WIDTH - CASTLE_SIZE * TILE_SIZE * 2;
-  r.h = CASTLE_SIZE * TILE_SIZE;
-
-  //SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-  //SDL_SetRenderDrawColor(renderer, 0, 255, 0, 20);
-  //SDL_RenderFillRect(renderer, &r);
-  
-  for (Sint32 row = 0; row < CASTLE_SIZE; row++) {
-    for (Sint32 col = 0; col < CASTLE_SIZE; col++) {
-      Sint32 x = TILE_SIZE * CASTLE_SIZE + TILE_SIZE * row;
-      Sint32 y = SCREEN_HEIGHT - CASTLE_SIZE * TILE_SIZE + TILE_SIZE * col;
-      renderTexture(grassTexture, x, y, TILE_SIZE, TILE_SIZE, 0, 255);
-    }
-  }
-
-}
-
 // Render clouds
 void renderClouds() {
   
@@ -583,5 +560,12 @@ void renderMainMenu() {
 
   // Render logo
   renderTexture(logoTexture, (SCREEN_WIDTH / 2) - 32, 64, 64, 32, 0, 255);
+
+  // Render credits
+  renderText(font, "seashinegames.itch.io", { .r = 255, .g = 255, .b = 255 }, &creditsText);
+  SDL_QueryTexture(creditsText, NULL, NULL, &w, &h);
+
+  dstScore = { .x = (SCREEN_WIDTH / 2) - (w / 2), .y = SCREEN_HEIGHT - 32, .w = w, .h = h };
+  SDL_RenderCopy(renderer, creditsText, NULL, &dstScore);
 
 }

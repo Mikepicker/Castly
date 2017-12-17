@@ -22,7 +22,7 @@ all : $(OBJS)
 		$(CC) -g $(OBJS) $(COMPILER_FLAGS) $(LINKER_FLAGS) -o $(OBJ_NAME)
 
 linux : $(OBJS)
-		$(CC) $(OBJS) $(COMPILER_FLAGS) $(LINKER_FLAGS) -o $(OBJ_NAME)
+		$(CC) $(OBJS) $(COMPILER_FLAGS) $(LINKER_FLAGS) -o $(OBJ_NAME) && ./bundle_linux.sh
 
 win : $(OBJS)
 	$(MINGW) $(OBJS) $(COMPILER_FLAGS) $(WIN_LINKER_FLAGS) -o $(EXE_NAME)
